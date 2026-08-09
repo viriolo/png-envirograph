@@ -19,6 +19,7 @@ Standard library only.
 
 import json
 import re
+import sys
 import urllib.request
 from collections import Counter
 
@@ -83,16 +84,21 @@ def clean_keyword(kw):
 
 
 def main():
+    # These exit non-zero rather than returning quietly: the monthly refresh
+    # workflow has no eyes on the output, and a portal that's down must not
+    # look like a run where nothing happened to change.
     try:
         catalogue = fetch_catalogue(DATA_URL)
     except Exception as error:
         print(f"\nCouldn't fetch the catalogue: {error}")
-        return
+        sys.exit(1)
 
     datasets = catalogue.get("dataset", [])
     print(f"Found {len(datasets)} datasets.\n")
     if not datasets:
-        return
+        print("The catalogue came back with no datasets at all -- refusing to "
+              "overwrite graph.json with an empty graph.")
+        sys.exit(1)
 
     nodes = {}
     links = []

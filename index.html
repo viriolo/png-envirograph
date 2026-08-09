@@ -161,22 +161,44 @@
 </div>
 
 <script>
+/* Seven hues, not nine. Nine categorical colours is past the point where
+   adjacent ones stay apart, and the two that pushed it over -- Nuclear Legacy
+   and Disaster Risk Management -- carry nine datasets between them out of 880.
+   They keep their real names everywhere; they just share a recessive stone
+   instead of each burning a hue. Nothing is merged in the data: graph.json
+   still has all nine theme nodes with their true labels and counts.
+
+   Two of these moved for measured reasons rather than taste. Atmosphere was
+   #7FB5E6, a second blue sitting dE 8.0 from Coastal -- now a deep indigo at
+   dE 21. Built Environment was #9A9387, which had almost no chroma and sat
+   dE 2.4 from the sage of every dataset dot, so a theme hub looked like the
+   880 things pointing at it -- now a warm sand, clear of both.
+
+   What is NOT fixed, honestly: seven hues cannot all clear the separation
+   gates on this surface -- a search over the whole space topped out well
+   short. Culture/Coastal and Inland Waters/Biodiversity stay close. That is
+   survivable here only because every theme node is permanently labelled in
+   the graph, so colour is wayfinding, not identity. Do not copy this palette
+   somewhere the labels come off. */
 const THEME_COLORS = {
   "Biodiversity":"#5BBF7B","Coastal and Marine":"#3FA9C9","Land":"#C98A3F",
-  "Atmosphere and Climate":"#7FB5E6","Built Environment":"#9A9387",
-  "Culture and Heritage":"#C56FA8","Inland Waters":"#4FC8C0",
-  "Nuclear Legacy":"#C75C5C","Disaster Risk Management":"#E0A93B"
+  "Atmosphere and Climate":"#595AC0","Built Environment":"#E3D98F",
+  "Culture and Heritage":"#C56FA8","Inland Waters":"#4FC8C0"
 };
+const MINOR_THEMES = new Set(["Nuclear Legacy","Disaster Risk Management"]);
+const MINOR_COLOR = "#D1CFBD";   // dE 21 from the dataset sage, which is the collision that mattered
 // Datasets and keywords are both small unlabelled dots, so colour was the only
 // thing telling them apart -- and the old pair sat at dE 7.5 for normal vision
 // and 5.1 under deuteranopia, i.e. not apart at all. Keywords now carry a
 // stronger violet AND a diamond shape, so the distinction survives colour
 // blindness, a bad monitor and a projector.
-const FALLBACK_THEME = "#D9D2C5";   // only fires if the portal adds a new theme
+// A theme the portal adds later is, by definition, one nobody has assigned a
+// hue to yet -- so it renders as a minor theme until someone does.
+const FALLBACK_THEME = MINOR_COLOR;
 const ORG_COLOR = "#E8714C";
 const DS_COLOR = "#7c9388";
 const KW_COLOR = "#B49BE8";
-const themeColor = n => THEME_COLORS[n] || FALLBACK_THEME;
+const themeColor = n => MINOR_THEMES.has(n) ? MINOR_COLOR : (THEME_COLORS[n] || FALLBACK_THEME);
 
 let network, nodesDS, edgesDS, adj = {}, byId = {}, searchIndex = [];
 
@@ -369,12 +391,22 @@ document.querySelectorAll('.chip').forEach(chip => {
 
 /* ---------- theme legend ---------- */
 const lr = document.getElementById('legend-rows');
-Object.keys(THEME_COLORS).forEach(name => {
+function legendRow(name, colour){
   const row = document.createElement('div'); row.className = 'lrow';
-  row.innerHTML = `<span class="sw" style="background:${THEME_COLORS[name]}"></span>${name}`;
+  row.innerHTML = `<span class="sw" style="background:${colour}"></span>${esc(name)}`;
   row.onclick = () => { const id = 'theme::'+name; if(byId[id]) showDetails(id); };
   lr.appendChild(row);
-});
+}
+Object.keys(THEME_COLORS).forEach(name => legendRow(name, THEME_COLORS[name]));
+
+// The two smallest themes share the stone. They are still named here and still
+// click through to their own node -- they simply don't hold a hue of their own.
+if(MINOR_THEMES.size){
+  const note = document.createElement('div');
+  note.className = 'lt'; note.style.marginTop = '7px'; note.textContent = 'Also present';
+  lr.appendChild(note);
+  MINOR_THEMES.forEach(name => legendRow(name, MINOR_COLOR));
+}
 
 start();
 </script>

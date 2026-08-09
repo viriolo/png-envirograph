@@ -1,0 +1,58 @@
+name: Refresh graph
+
+# The portal keeps publishing. Without this the site quietly drifts out of date
+# and nothing announces it -- 875 datasets became 880 while nobody was looking.
+# The page reads its counts out of graph.json at run time, so refreshing that
+# one file is enough to keep the live figures honest.
+
+on:
+  schedule:
+    - cron: "0 18 1 * *"     # 1st of the month, 18:00 UTC = 04:00 PNG next day
+  workflow_dispatch:          # and on demand, from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-graph
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # No pip install: build_graph.py is standard library only, by design.
+      # It exits non-zero if the portal is unreachable or returns nothing, so
+      # an outage fails the run instead of looking like "no changes".
+      - name: Rebuild graph.json from the portal
+        run: python build_graph.py | tee build-output.txt
+
+      - name: Commit if the catalogue moved
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- graph.json; then
+            echo "The catalogue is unchanged since the last run. Nothing to commit." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          counts=$(grep -E "^Found |^Wrote " build-output.txt | tr '\n' ' ' | sed 's/  */ /g')
+
+          printf '### Graph refreshed\n\n```\n%s\n```\n' "$counts" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Refresh graph.json from the portal\n\n%s\n' "$counts" > commit-message.txt
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add graph.json
+          git commit -F commit-message.txt
+          git push
+
+      - name: Clean up
+        if: always()
+        run: rm -f build-output.txt commit-message.txt

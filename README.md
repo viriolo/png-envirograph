@@ -40,7 +40,9 @@ Three steps, deliberately kept simple:
 
 The whole thing is static files, and the Python uses only the standard library — no dependencies, no database, no server. It hosts for free on GitHub Pages, Netlify, or Cloudflare Pages.
 
-Reading the graph: datasets are the small sage dots, organisations are the clay hubs, keywords are the muted violet nodes, and the nine themes are coloured by what they are — green for Biodiversity, teal for Coastal and Marine, earth-amber for Land, and so on.
+Reading the graph: datasets are the small sage dots, organisations are the clay hubs, keywords are the violet diamonds, and the themes are coloured by what they are — green for Biodiversity, blue for Coastal and Marine, earth-amber for Land, and so on.
+
+Seven themes carry a hue of their own. The two smallest — Nuclear Legacy and Disaster Risk Management, nine datasets between them — share a neutral stone instead, because nine categorical colours is past the point where neighbouring ones stay apart. They keep their names in the graph, the legend and the detail panel; nothing is merged in the data, and `graph.json` still holds all nine themes with their true counts.
 
 Alongside publishers and themes there's a **keyword layer**, which links datasets carrying the same tag across different publishers and themes. Three filters keep it useful rather than noisy: keywords used only once are skipped (they connect nothing), a few too-generic terms are dropped (`png`, `papua new guinea`, `data` — true of almost everything, so they'd hub the whole graph together), and obvious variants are folded via an alias lookup. Of 1,895 unique keywords, 468 earn a node.
 
@@ -57,7 +59,7 @@ Opening `index.html` directly won't work — browsers block local files from rea
 
 This is the backbone graph: datasets, organisations, themes, and shared keywords, with the `PUBLISHED_BY`, `HAS_THEME` and `HAS_KEYWORD` relationships between them. The underlying files (resources) are left out to keep the view readable, and there are no geographic links — for the reason set out above: the `spatial` field carries no province names, and its coordinates need repair before they can be used. The publisher cleanup is curated by hand from the most common names — it catches the large duplicates, but isn't claimed to be exhaustive.
 
-Dataset counts move as the portal is updated; the figures here were current at the last rebuild. Re-running `build_graph.py` refreshes both the graph and the counts printed at the end of the run.
+Dataset counts move as the portal is updated; the figures quoted in this README were current at the last rebuild. The live page doesn't have that problem — it counts whatever is in `graph.json` when you open it, and a scheduled job (`.github/workflows/refresh-graph.yml`) rebuilds that file from the portal on the first of each month, committing only when something has actually changed. You can also trigger it by hand from the Actions tab, or just run `build_graph.py` yourself.
 
 ## Data and attribution
 
