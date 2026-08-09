@@ -54,7 +54,10 @@
   .stat .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin-top:2px}
 
   /* Search + filters */
+  /* The results list can make this tall, so cap it against the viewport
+     rather than letting it run off the bottom of short screens. */
   #tools{top:22px;right:22px;padding:14px;width:266px;display:flex;flex-direction:column;gap:12px;
+    max-height:calc(100vh - 44px);overflow-y:auto;
     animation:rise .7s .08s cubic-bezier(.2,.7,.2,1) both}
   .srch{position:relative}
   .srch input{width:100%;padding:9px 12px;border-radius:9px;border:1px solid var(--border);
@@ -99,7 +102,11 @@
   .tpill{font-size:11.5px;padding:3px 9px;border-radius:20px;color:#0e1311;font-weight:500}
   #details a.portal{display:inline-block;margin-top:6px;color:var(--clay);font-size:13px;text-decoration:none;
     border-bottom:1px solid rgba(232,113,76,.4);padding-bottom:1px}
-  .bignum{font-family:"IBM Plex Mono",monospace;font-size:38px;font-weight:500;color:var(--ink);line-height:1}
+  /* The hero figure wears the same sans as everything else, with proportional
+     digits. Equal-width digits are for numbers that line up in a column; on a
+     standalone 38px figure they just make something like 313 read loose. */
+  .bignum{font-family:"IBM Plex Sans",sans-serif;font-size:38px;font-weight:600;
+    font-variant-numeric:proportional-nums;letter-spacing:-.015em;color:var(--ink);line-height:1}
 
   /* Loading + footer */
   #loading{position:fixed;inset:0;z-index:5;background:var(--bg);display:flex;flex-direction:column;
@@ -112,12 +119,75 @@
   #loading .ls{font-size:12px;color:var(--faint);max-width:300px;text-align:center;line-height:1.6}
   footer{position:fixed;bottom:14px;left:22px;z-index:3;font-size:11px;color:var(--faint)}
   @keyframes rise{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
-  @media (max-width:720px){header,#tools{position:fixed}#tools{width:220px}#details{width:100%}}
+
+  /* Visible only to screen readers -- used for the search field's label, which
+     the placeholder was standing in for. A placeholder is not a label. */
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+  /* One focus treatment for every control, so keyboard users can see where
+     they are. :focus-visible keeps it off mouse clicks. */
+  .chip:focus-visible,.lrow:focus-visible,#q:focus-visible,.close:focus-visible,
+  .tbtn:focus-visible,.res-row:focus-visible,#graph:focus-visible,#tv-close:focus-visible{
+    outline:2px solid var(--clay);outline-offset:2px}
+  #graph:focus{outline:none}
+  #graph:focus-visible{outline:2px solid var(--clay);outline-offset:-2px}
+
+  /* Search results. The old build opened the first match and stranded the
+     rest; these are the rest. */
+  .results{display:none;flex-direction:column;gap:2px;max-height:232px;overflow-y:auto;
+    margin-top:2px;border-top:1px solid var(--line);padding-top:8px}
+  .results.on{display:flex}
+  .res-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;
+    border:none;background:none;color:var(--muted);font:inherit;font-size:12px;
+    text-align:left;cursor:pointer;width:100%}
+  .res-row:hover,.res-row.sel{background:rgba(124,147,136,.16);color:var(--ink)}
+  .res-row .sw{width:8px;height:8px;border-radius:50%;flex:none}
+  .res-row .sw.dia{border-radius:1px;transform:rotate(45deg);width:7px;height:7px}
+  .res-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .res-more{font-size:11px;color:var(--faint);padding:4px 6px}
+
+  /* Buttons that used to be divs. Reset the browser chrome, keep the look. */
+  .chip{font:inherit;font-size:11.5px;line-height:1.2}
+  .lrow{font:inherit;font-size:12px;border:none;background:none;width:100%;text-align:left}
+  .tbtn{width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--border);
+    background:rgba(10,14,12,.4);color:var(--muted);font:inherit;font-size:11.5px;
+    cursor:pointer;transition:.18s}
+  .tbtn:hover{color:var(--ink);background:rgba(124,147,136,.16);border-color:rgba(150,180,168,.35)}
+
+  /* Table view: the WCAG-clean twin of the graph. Every value the canvas holds
+     in a tooltip is readable, selectable and searchable here instead. */
+  #tableview{position:fixed;inset:0;z-index:6;background:rgba(10,14,12,.96);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;flex-direction:column}
+  #tableview.on{display:flex}
+  #tv-head{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--line);flex:none}
+  #tv-head h2{font-family:"Fraunces",serif;font-weight:500;font-size:18px;margin:0;color:var(--ink)}
+  #tv-count{font-size:12px;color:var(--faint)}
+  #tv-close{margin-left:auto;border:1px solid var(--border);background:rgba(10,14,12,.5);
+    color:var(--muted);font:inherit;font-size:12px;padding:6px 12px;border-radius:8px;cursor:pointer}
+  #tv-close:hover{color:var(--ink)}
+  #tv-scroll{overflow:auto;padding:0 22px 22px}
+  #tv-table{width:100%;border-collapse:collapse;font-size:12.5px}
+  #tv-table th{position:sticky;top:0;background:#0d1210;text-align:left;font-weight:500;
+    font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);
+    padding:12px 10px;border-bottom:1px solid var(--line);z-index:1}
+  #tv-table td{padding:9px 10px;border-bottom:1px solid rgba(120,150,138,.09);
+    color:var(--muted);vertical-align:top;line-height:1.45}
+  #tv-table td.t{color:var(--ink);max-width:420px}
+  #tv-table tr:hover td{background:rgba(124,147,136,.07)}
+  #tv-table a{color:var(--clay);text-decoration:none}
+  #tv-table a:hover{text-decoration:underline}
+  .tp{display:inline-block;font-size:10.5px;padding:2px 7px;border-radius:20px;
+    color:#0e1311;font-weight:500;margin:0 4px 3px 0}
+
+  @media (max-width:720px){header,#tools{position:fixed}#tools{width:220px}#details{width:100%}
+    #tv-table td.t{max-width:none}}
 </style>
 </head>
 <body>
 <div id="bg"></div>
-<div id="graph"></div>
+<div id="graph" tabindex="0" role="application"
+     aria-label="Network graph of datasets, publishing bodies, themes and keywords. Arrow keys pan and zoom once focused; the table view lists the same records as text."></div>
 
 <header class="panel">
   <div class="word"><span class="png">PNG</span> EnviroGraph</div>
@@ -132,25 +202,44 @@
 
 <div id="tools" class="panel">
   <div class="srch">
-    <input id="q" type="text" placeholder="Search datasets, bodies, themes, keywords…" autocomplete="off">
+    <label class="sr-only" for="q">Search datasets, bodies, themes and keywords</label>
+    <input id="q" type="text" placeholder="Search datasets, bodies, themes, keywords…"
+           autocomplete="off" role="combobox" aria-expanded="false"
+           aria-controls="results" aria-autocomplete="list">
   </div>
-  <div class="hint" id="hint"></div>
+  <div class="hint" id="hint" role="status" aria-live="polite"></div>
+  <div class="results" id="results" role="listbox" aria-label="Search results"></div>
   <div class="chips">
-    <div class="chip on" data-type="Dataset"><span class="dot" style="background:#7c9388"></span>Datasets</div>
-    <div class="chip on" data-type="Organisation"><span class="dot" style="background:#E8714C"></span>Bodies</div>
-    <div class="chip on" data-type="Theme"><span class="dot" style="background:#5BBF7B"></span>Themes</div>
-    <div class="chip on" data-type="Keyword"><span class="dot dia" style="background:#B49BE8"></span>Keywords</div>
+    <button type="button" class="chip on" data-type="Dataset" role="switch" aria-pressed="true"><span class="dot" style="background:#7c9388"></span>Datasets</button>
+    <button type="button" class="chip on" data-type="Organisation" role="switch" aria-pressed="true"><span class="dot" style="background:#E8714C"></span>Bodies</button>
+    <button type="button" class="chip on" data-type="Theme" role="switch" aria-pressed="true"><span class="dot" style="background:#5BBF7B"></span>Themes</button>
+    <button type="button" class="chip on" data-type="Keyword" role="switch" aria-pressed="true"><span class="dot dia" style="background:#B49BE8"></span>Keywords</button>
   </div>
+  <button type="button" class="tbtn" id="tv-open">Open table view</button>
   <div class="legend">
     <div class="lt">Themes</div>
     <div id="legend-rows"></div>
   </div>
 </div>
 
-<aside id="details" class="panel">
-  <button class="close" id="d-close">&times;</button>
+<aside id="details" class="panel" aria-label="Selected item">
+  <button class="close" id="d-close" aria-label="Close details">&times;</button>
   <div id="d-body"></div>
 </aside>
+
+<div id="tableview" role="dialog" aria-modal="true" aria-labelledby="tv-title">
+  <div id="tv-head">
+    <h2 id="tv-title">Datasets</h2>
+    <span id="tv-count"></span>
+    <button type="button" id="tv-close">Close (Esc)</button>
+  </div>
+  <div id="tv-scroll">
+    <table id="tv-table">
+      <thead><tr><th>Dataset</th><th>Published by</th><th>Themes</th><th>Licence</th><th>Issued</th><th></th></tr></thead>
+      <tbody id="tv-body"></tbody>
+    </table>
+  </div>
+</div>
 
 <footer>Source: PNG Environment Data Portal · SPREP · publisher names cleaned for this graph</footer>
 
@@ -294,8 +383,10 @@ function build(data){
       barnesHut:{gravitationalConstant:-9000, springLength:130, springConstant:0.018, damping:0.42, avoidOverlap:0.05},
       stabilization:{enabled:true, iterations:280, updateInterval:25} },
     layout:{ improvedLayout:false },
+    // keyboard works only once the canvas itself has focus, so arrow keys still
+    // belong to the search results list everywhere else on the page.
     interaction:{ hover:true, tooltipDelay:120, hideEdgesOnDrag:true, hideEdgesOnZoom:true,
-      navigationButtons:false, keyboard:false }
+      navigationButtons:false, keyboard:{enabled:true, bindToWindow:false} }
   });
 
   network.on('stabilizationProgress', p => {
@@ -310,9 +401,34 @@ function build(data){
   });
 
   network.on('click', params => {
-    if(params.nodes.length) showDetails(params.nodes[0]);
-    else closeDetails();
+    if(params.nodes.length){ showDetails(params.nodes[0]); return; }
+    // Dataset dots render at ~4.5px. Demanding a dead-centre hit on those is
+    // the pinpoint-target problem, so a near miss picks the closest visible
+    // node instead of dismissing the panel.
+    const near = nearestNode(params.pointer.DOM);
+    if(near) showDetails(near); else closeDetails();
   });
+}
+
+/* Nearest visible node within a forgiving radius of the click. The tolerance
+   is expressed in screen pixels and converted into graph units, so it stays
+   the same physical size at every zoom level. */
+const CLICK_TOLERANCE_PX = 22;
+function nearestNode(pointerDOM){
+  if(!network) return null;
+  const scale = network.getScale() || 1;
+  const tol = CLICK_TOLERANCE_PX / scale;
+  const at = network.DOMtoCanvas(pointerDOM);
+  const positions = network.getPositions();
+  let best = null, bestDist = tol;
+  for(const id in positions){
+    const item = nodesDS.get(id);
+    if(!item || item.hidden) continue;
+    const p = positions[id];
+    const d = Math.hypot(p.x - at.x, p.y - at.y);
+    if(d <= bestDist){ bestDist = d; best = id; }
+  }
+  return best;
 }
 
 /* ---------- details panel ---------- */
@@ -366,33 +482,114 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt
 function closeDetails(){ document.getElementById('details').classList.remove('open'); if(network) network.unselectAll(); }
 document.getElementById('d-close').onclick = closeDetails;
 
-/* ---------- search ---------- */
-const q = document.getElementById('q'), hint = document.getElementById('hint');
-q.addEventListener('input', () => {
-  const term = q.value.trim().toLowerCase();
-  if(!term){ hint.textContent=''; return; }
-  const hits = searchIndex.filter(s => s.label.includes(term));
-  if(!hits.length){ hint.textContent = 'No matches'; return; }
-  hits.sort((a,b) => rank(a.type)-rank(b.type));
-  hint.textContent = hits.length + (hits.length===1?' match':' matches') + ' · showing first';
-  showDetails(hits[0].id);
-});
-function rank(t){ return t==='Theme'?0 : t==='Organisation'?1 : t==='Keyword'?2 : 3; }
-
 /* ---------- type filter chips ---------- */
+/* Which types are switched off. Search consults this too: it used to happily
+   fly to a node the chips had hidden, so you were zoomed at nothing. */
+const hiddenTypes = new Set();
+
 document.querySelectorAll('.chip').forEach(chip => {
-  chip.onclick = () => {
-    const on = chip.classList.toggle('on'); chip.classList.toggle('off', !on);
+  chip.addEventListener('click', () => {
+    const on = chip.classList.toggle('on');
+    chip.classList.toggle('off', !on);
+    chip.setAttribute('aria-pressed', String(on));
     const type = chip.dataset.type;
+    if(on) hiddenTypes.delete(type); else hiddenTypes.add(type);
     const updates = nodesDS.get().filter(n => n._type === type).map(n => ({id:n.id, hidden:!on}));
     nodesDS.update(updates);
-  };
+    runSearch();                       // results must drop the hidden type too
+    if(tableOpen()) renderTable();
+  });
+});
+
+/* ---------- search ---------- */
+/* Every match is reachable now. The previous build opened hits[0] on each
+   keystroke -- firing a 500ms fly-to per character -- and left matches 2..n
+   with no way to get at them. */
+const q = document.getElementById('q'),
+      hint = document.getElementById('hint'),
+      results = document.getElementById('results');
+const MAX_RESULTS = 50;
+let currentHits = [], selIndex = -1;
+
+function rank(t){ return t==='Theme'?0 : t==='Organisation'?1 : t==='Keyword'?2 : 3; }
+
+function swatchFor(node){
+  if(node.type === 'Keyword') return `<span class="sw dia" style="background:${KW_COLOR}"></span>`;
+  const c = node.type === 'Dataset' ? DS_COLOR
+          : node.type === 'Organisation' ? ORG_COLOR
+          : themeColor(node.label);
+  return `<span class="sw" style="background:${c}"></span>`;
+}
+
+function runSearch(){
+  const term = q.value.trim().toLowerCase();
+  currentHits = []; selIndex = -1;
+  if(!term){
+    hint.textContent = '';
+    results.innerHTML = '';
+    results.classList.remove('on');
+    q.setAttribute('aria-expanded','false');
+    return;
+  }
+  currentHits = searchIndex
+    .filter(s => s.label.includes(term) && !hiddenTypes.has(s.type))
+    .sort((a,b) => rank(a.type) - rank(b.type) || a.label.length - b.label.length);
+
+  if(!currentHits.length){
+    hint.textContent = hiddenTypes.size ? 'No matches in the types shown' : 'No matches';
+    results.innerHTML = '';
+    results.classList.remove('on');
+    q.setAttribute('aria-expanded','false');
+    return;
+  }
+
+  hint.textContent = currentHits.length + (currentHits.length === 1 ? ' match' : ' matches');
+  const shown = currentHits.slice(0, MAX_RESULTS);
+  results.innerHTML = shown.map((h,i) => {
+    const n = byId[h.id];
+    return `<button type="button" class="res-row" role="option" aria-selected="false" data-i="${i}">`
+         + swatchFor(n) + `<span class="nm">${esc(n.label)}</span></button>`;
+  }).join('')
+  + (currentHits.length > shown.length
+      ? `<div class="res-more">and ${currentHits.length - shown.length} more — keep typing to narrow</div>` : '');
+
+  results.classList.add('on');
+  q.setAttribute('aria-expanded','true');
+  results.querySelectorAll('.res-row').forEach(row => {
+    row.addEventListener('click', () => openHit(+row.dataset.i));
+  });
+}
+
+function highlight(i){
+  const rows = [...results.querySelectorAll('.res-row')];
+  if(!rows.length) return;
+  selIndex = (i + rows.length) % rows.length;
+  rows.forEach((r,k) => {
+    const on = k === selIndex;
+    r.classList.toggle('sel', on);
+    r.setAttribute('aria-selected', String(on));
+    if(on) r.scrollIntoView({block:'nearest'});
+  });
+}
+
+function openHit(i){
+  const h = currentHits[i];
+  if(h) showDetails(h.id);
+}
+
+q.addEventListener('input', runSearch);
+q.addEventListener('keydown', e => {
+  if(e.key === 'ArrowDown'){ e.preventDefault(); highlight(selIndex + 1); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); highlight(selIndex - 1); }
+  else if(e.key === 'Enter'){ e.preventDefault(); openHit(selIndex >= 0 ? selIndex : 0); }
+  else if(e.key === 'Escape'){ q.value = ''; runSearch(); q.blur(); }
 });
 
 /* ---------- theme legend ---------- */
 const lr = document.getElementById('legend-rows');
 function legendRow(name, colour){
-  const row = document.createElement('div'); row.className = 'lrow';
+  const row = document.createElement('button');
+  row.type = 'button'; row.className = 'lrow';
   row.innerHTML = `<span class="sw" style="background:${colour}"></span>${esc(name)}`;
   row.onclick = () => { const id = 'theme::'+name; if(byId[id]) showDetails(id); };
   lr.appendChild(row);
@@ -407,6 +604,62 @@ if(MINOR_THEMES.size){
   lr.appendChild(note);
   MINOR_THEMES.forEach(name => legendRow(name, MINOR_COLOR));
 }
+
+/* ---------- table view ---------- */
+/* A canvas hides its values inside hover tooltips, which are unreachable by
+   keyboard, unreadable by a screen reader and impossible to copy. This is the
+   same records as text: selectable, searchable with Ctrl+F, and honest about
+   how many rows it is showing. It follows the search box and the type chips,
+   so what you filter is what you get. */
+const tableview = document.getElementById('tableview'),
+      tvBody = document.getElementById('tv-body'),
+      tvCount = document.getElementById('tv-count');
+const TABLE_LIMIT = 400;
+let lastFocused = null;
+
+const tableOpen = () => tableview.classList.contains('on');
+
+function renderTable(){
+  const term = q.value.trim().toLowerCase();
+  let rows = Object.values(byId).filter(n => n.type === 'Dataset');
+  if(term) rows = rows.filter(n => n.label.toLowerCase().includes(term));
+  rows.sort((a,b) => a.label.localeCompare(b.label));
+
+  const shown = rows.slice(0, TABLE_LIMIT);
+  tvCount.textContent = shown.length < rows.length
+    ? `showing ${shown.length} of ${rows.length}${term ? ' matching' : ''} — narrow with the search box`
+    : `${rows.length}${term ? ' matching' : ''} dataset${rows.length === 1 ? '' : 's'}`;
+
+  tvBody.innerHTML = shown.map(n => {
+    const org = neighborsOfType(n.id,'Organisation')[0];
+    const themes = neighborsOfType(n.id,'Theme')
+      .map(t => `<span class="tp" style="background:${themeColor(t.label)}">${esc(t.label)}</span>`).join('');
+    const link = n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">Portal ↗</a>` : '';
+    return `<tr><td class="t">${esc(n.label)}</td><td>${org ? esc(org.label) : '—'}</td>`
+         + `<td>${themes || '—'}</td><td>${esc(n.license || '—')}</td>`
+         + `<td>${esc(n.issued ? String(n.issued).slice(0,10) : '—')}</td><td>${link}</td></tr>`;
+  }).join('');
+}
+
+function openTable(){
+  lastFocused = document.activeElement;
+  renderTable();
+  tableview.classList.add('on');
+  document.getElementById('tv-close').focus();
+}
+function closeTable(){
+  tableview.classList.remove('on');
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+document.getElementById('tv-open').addEventListener('click', openTable);
+document.getElementById('tv-close').addEventListener('click', closeTable);
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){
+    if(tableOpen()) closeTable();
+    else if(document.getElementById('details').classList.contains('open')) closeDetails();
+  }
+});
 
 start();
 </script>
