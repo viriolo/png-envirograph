@@ -1,0 +1,6 @@
+# AuraDB credentials -- NEVER commit these
+auradb_secrets.json
+
+# Python
+__pycache__/
+*.pyc

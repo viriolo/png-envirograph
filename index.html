@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PNG EnviroGraph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
+<style>
+  :root{
+    --bg:#0e1311; --bg2:#141b18; --ink:#e9e7df; --muted:#9aa79f; --faint:#6b7872;
+    --line:rgba(120,150,138,.16); --panel:rgba(20,27,24,.72); --border:rgba(150,180,168,.16);
+    --clay:#E8714C; --sage:#7c9388;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",sans-serif;overflow:hidden}
+  #bg{position:fixed;inset:0;z-index:0;
+    background:radial-gradient(120% 90% at 30% 10%,#16201c 0%,#0e1311 55%,#0a0e0c 100%)}
+  #graph{position:fixed;inset:0;z-index:1}
+
+  .panel{position:fixed;z-index:3;background:var(--panel);border:1px solid var(--border);
+    border-radius:14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    box-shadow:0 18px 50px -20px rgba(0,0,0,.7)}
+
+  /* Header */
+  header{top:22px;left:22px;padding:18px 22px;max-width:340px;
+    animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+  .word{font-family:"Fraunces",serif;font-weight:600;font-size:26px;letter-spacing:-.01em;line-height:1}
+  .word .png{color:var(--clay)}
+  .tag{margin-top:8px;font-size:12.5px;color:var(--muted);line-height:1.5}
+  .stats{margin-top:14px;display:flex;gap:18px}
+  .stat .n{font-family:"IBM Plex Mono",monospace;font-size:19px;color:var(--ink);font-weight:500}
+  .stat .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);margin-top:2px}
+
+  /* Search + filters */
+  #tools{top:22px;right:22px;padding:14px;width:266px;display:flex;flex-direction:column;gap:12px;
+    animation:rise .7s .08s cubic-bezier(.2,.7,.2,1) both}
+  .srch{position:relative}
+  .srch input{width:100%;padding:9px 12px;border-radius:9px;border:1px solid var(--border);
+    background:rgba(10,14,12,.6);color:var(--ink);font-family:inherit;font-size:13px;outline:none}
+  .srch input::placeholder{color:var(--faint)}
+  .srch input:focus{border-color:rgba(232,113,76,.55)}
+  .hint{font-size:11px;color:var(--faint);min-height:14px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{flex:1 1 44%;padding:7px 4px;border-radius:8px;border:1px solid var(--border);
+    background:rgba(10,14,12,.4);color:var(--muted);font-size:11.5px;cursor:pointer;text-align:center;
+    transition:.18s;user-select:none}
+  .chip .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+  .chip.on{color:var(--ink);background:rgba(124,147,136,.16);border-color:rgba(150,180,168,.35)}
+  .chip.off{opacity:.42}
+
+  /* Theme legend */
+  .legend{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:11px}
+  .legend .lt{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint)}
+  .lrow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;
+    padding:2px 4px;border-radius:6px;transition:.15s}
+  .lrow:hover{background:rgba(124,147,136,.12);color:var(--ink)}
+  .lrow .sw{width:10px;height:10px;border-radius:50%;flex:none}
+
+  /* Details panel */
+  #details{top:0;right:0;height:100%;width:340px;border-radius:0;border-left:1px solid var(--border);
+    transform:translateX(105%);transition:transform .32s cubic-bezier(.2,.7,.2,1);
+    padding:26px 24px;overflow-y:auto;background:rgba(16,21,19,.9)}
+  #details.open{transform:translateX(0)}
+  #details .close{position:absolute;top:18px;right:18px;border:none;background:none;color:var(--faint);
+    font-size:20px;cursor:pointer;line-height:1}
+  #details .badge{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
+    padding:4px 9px;border-radius:20px;margin-bottom:14px}
+  #details h2{font-family:"Fraunces",serif;font-weight:500;font-size:21px;line-height:1.25;margin:0 0 18px}
+  .kv{margin:0 0 13px}
+  .kv .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:3px}
+  .kv .v{font-size:13.5px;color:var(--ink);line-height:1.5;word-break:break-word}
+  .kv .v.raw{color:var(--muted);font-size:12px;font-style:italic}
+  .tpills{display:flex;flex-wrap:wrap;gap:6px}
+  .tpill{font-size:11.5px;padding:3px 9px;border-radius:20px;color:#0e1311;font-weight:500}
+  #details a.portal{display:inline-block;margin-top:6px;color:var(--clay);font-size:13px;text-decoration:none;
+    border-bottom:1px solid rgba(232,113,76,.4);padding-bottom:1px}
+  .bignum{font-family:"IBM Plex Mono",monospace;font-size:38px;font-weight:500;color:var(--ink);line-height:1}
+
+  /* Loading + footer */
+  #loading{position:fixed;inset:0;z-index:5;background:var(--bg);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:18px;transition:opacity .5s}
+  #loading.done{opacity:0;pointer-events:none}
+  #loading .lw{font-family:"Fraunces",serif;font-size:24px;color:var(--ink)}
+  #loading .lw .png{color:var(--clay)}
+  .bar{width:220px;height:3px;border-radius:3px;background:rgba(124,147,136,.18);overflow:hidden}
+  .bar i{display:block;height:100%;width:0;background:var(--clay);transition:width .2s}
+  #loading .ls{font-size:12px;color:var(--faint);max-width:300px;text-align:center;line-height:1.6}
+  footer{position:fixed;bottom:14px;left:22px;z-index:3;font-size:11px;color:var(--faint)}
+  @keyframes rise{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+  @media (max-width:720px){header,#tools{position:fixed}#tools{width:220px}#details{width:100%}}
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="graph"></div>
+
+<header class="panel">
+  <div class="word"><span class="png">PNG</span> EnviroGraph</div>
+  <div class="tag">A knowledge graph of Papua New Guinea's environmental datasets, drawn from the SPREP data portal.</div>
+  <div class="stats">
+    <div class="stat"><div class="n" id="s-ds">—</div><div class="l">Datasets</div></div>
+    <div class="stat"><div class="n" id="s-org">—</div><div class="l">Bodies</div></div>
+    <div class="stat"><div class="n" id="s-th">—</div><div class="l">Themes</div></div>
+    <div class="stat"><div class="n" id="s-kw">—</div><div class="l">Keywords</div></div>
+  </div>
+</header>
+
+<div id="tools" class="panel">
+  <div class="srch">
+    <input id="q" type="text" placeholder="Search datasets, bodies, themes, keywords…" autocomplete="off">
+  </div>
+  <div class="hint" id="hint"></div>
+  <div class="chips">
+    <div class="chip on" data-type="Dataset"><span class="dot" style="background:#7c9388"></span>Datasets</div>
+    <div class="chip on" data-type="Organisation"><span class="dot" style="background:#E8714C"></span>Bodies</div>
+    <div class="chip on" data-type="Theme"><span class="dot" style="background:#5BBF7B"></span>Themes</div>
+    <div class="chip on" data-type="Keyword"><span class="dot" style="background:#8E86A8"></span>Keywords</div>
+  </div>
+  <div class="legend">
+    <div class="lt">Themes</div>
+    <div id="legend-rows"></div>
+  </div>
+</div>
+
+<aside id="details" class="panel">
+  <button class="close" id="d-close">&times;</button>
+  <div id="d-body"></div>
+</aside>
+
+<footer>Source: PNG Environment Data Portal · SPREP · publisher names cleaned for this graph</footer>
+
+<div id="loading">
+  <div class="lw"><span class="png">PNG</span> EnviroGraph</div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="ls" id="lstatus">Loading the graph…</div>
+</div>
+
+<script>
+const THEME_COLORS = {
+  "Biodiversity":"#5BBF7B","Coastal and Marine":"#3FA9C9","Land":"#C98A3F",
+  "Atmosphere and Climate":"#7FB5E6","Built Environment":"#9A9387",
+  "Culture and Heritage":"#C56FA8","Inland Waters":"#4FC8C0",
+  "Nuclear Legacy":"#C75C5C","Disaster Risk Management":"#E0A93B"
+};
+const FALLBACK_THEME = "#8FA68E";
+const ORG_COLOR = "#E8714C";
+const DS_COLOR = "#7c9388";
+const KW_COLOR = "#8E86A8";
+const themeColor = n => THEME_COLORS[n] || FALLBACK_THEME;
+
+let network, nodesDS, edgesDS, adj = {}, byId = {}, searchIndex = [];
+
+function setStatus(t){ document.getElementById('lstatus').textContent = t; }
+
+async function start(){
+  let data;
+  try {
+    const res = await fetch('graph.json');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    data = await res.json();
+  } catch(err){
+    setStatus("Couldn't load graph.json. If you opened this file directly, your browser blocks local reads. "
+      + "In this folder run:  python -m http.server 8000  then open http://localhost:8000 — or just upload both files to your host, where it works automatically.");
+    document.getElementById('bar').style.background = '#9A9387';
+    return;
+  }
+  build(data);
+}
+
+function build(data){
+  byId = {};
+  data.nodes.forEach(n => byId[n.id] = n);
+  data.links.forEach(l => {
+    (adj[l.source] = adj[l.source] || []).push(l.target);
+    (adj[l.target] = adj[l.target] || []).push(l.source);
+  });
+
+  let nDs=0, nOrg=0, nTh=0, nKw=0;
+  const visNodes = data.nodes.map(n => {
+    searchIndex.push({id:n.id, label:n.label.toLowerCase(), type:n.type});
+    if(n.type === 'Dataset'){
+      nDs++;
+      return {id:n.id, title:n.label, size:4.5,
+        color:{background:DS_COLOR, border:DS_COLOR, highlight:{background:'#cfe0d6',border:'#cfe0d6'}},
+        _type:'Dataset'};
+    }
+    if(n.type === 'Organisation'){
+      nOrg++;
+      return {id:n.id, label:n.label, shape:'dot', size:11 + Math.sqrt(n.count||1)*3,
+        color:{background:ORG_COLOR, border:ORG_COLOR, highlight:{background:'#ffb39a',border:'#ffb39a'}},
+        font:{color:'#f0d9cf', size:13, face:'IBM Plex Sans', strokeWidth:4, strokeColor:'#0e1311'},
+        _type:'Organisation'};
+    }
+    if(n.type === 'Keyword'){
+      nKw++;
+      return {id:n.id, title:n.label, shape:'dot', size:5 + Math.sqrt(n.count||1)*1.6,
+        color:{background:KW_COLOR, border:KW_COLOR, highlight:{background:'#cfc8e6',border:'#cfc8e6'}},
+        _type:'Keyword'};
+    }
+    nTh++;
+    const c = themeColor(n.label);
+    return {id:n.id, label:n.label, shape:'dot', size:14 + Math.sqrt(n.count||1)*2.6,
+      color:{background:c, border:c, highlight:{background:'#ffffff',border:c}},
+      font:{color:c, size:14, face:'IBM Plex Sans', strokeWidth:4, strokeColor:'#0e1311'},
+      _type:'Theme'};
+  });
+
+  const visEdges = data.links.map((l,i) => ({id:'e'+i, from:l.source, to:l.target}));
+
+  document.getElementById('s-ds').textContent = nDs;
+  document.getElementById('s-org').textContent = nOrg;
+  document.getElementById('s-th').textContent = nTh;
+  document.getElementById('s-kw').textContent = nKw;
+
+  nodesDS = new vis.DataSet(visNodes);
+  edgesDS = new vis.DataSet(visEdges);
+
+  network = new vis.Network(document.getElementById('graph'), {nodes:nodesDS, edges:edgesDS}, {
+    nodes:{ borderWidth:0 },
+    edges:{ color:{color:'rgba(124,147,136,.22)', highlight:'rgba(232,113,76,.65)'},
+            width:0.4, smooth:false },
+    physics:{ enabled:true, solver:'barnesHut',
+      barnesHut:{gravitationalConstant:-9000, springLength:130, springConstant:0.018, damping:0.42, avoidOverlap:0.05},
+      stabilization:{enabled:true, iterations:280, updateInterval:25} },
+    layout:{ improvedLayout:false },
+    interaction:{ hover:true, tooltipDelay:120, hideEdgesOnDrag:true, hideEdgesOnZoom:true,
+      navigationButtons:false, keyboard:false }
+  });
+
+  network.on('stabilizationProgress', p => {
+    document.getElementById('bar').style.width = Math.round(p.iterations/p.total*100)+'%';
+  });
+  network.once('stabilizationIterationsDone', () => {
+    network.setOptions({physics:false});
+    document.getElementById('bar').style.width = '100%';
+    setStatus('Ready');
+    document.getElementById('loading').classList.add('done');
+    network.fit({animation:{duration:600}});
+  });
+
+  network.on('click', params => {
+    if(params.nodes.length) showDetails(params.nodes[0]);
+    else closeDetails();
+  });
+}
+
+/* ---------- details panel ---------- */
+function neighborsOfType(id, type){
+  return (adj[id]||[]).filter(x => byId[x] && byId[x].type === type).map(x => byId[x]);
+}
+function showDetails(id){
+  const n = byId[id]; if(!n) return;
+  const body = document.getElementById('d-body');
+  let html = '';
+  if(n.type === 'Dataset'){
+    const org = neighborsOfType(id,'Organisation')[0];
+    const themes = neighborsOfType(id,'Theme');
+    html += `<span class="badge" style="background:rgba(124,147,136,.2);color:#bcd0c5">Dataset</span>`;
+    html += `<h2>${esc(n.label)}</h2>`;
+    if(org){ html += kv('Published by', esc(org.label)); }
+    if(n.publisher_raw && org && n.publisher_raw.trim() !== org.label){
+      html += `<div class="kv"><div class="k">Recorded on portal as</div><div class="v raw">${esc(n.publisher_raw)}</div></div>`;
+    }
+    if(n.license) html += kv('Licence', esc(n.license));
+    if(n.issued) html += kv('Issued', esc(String(n.issued).slice(0,10)));
+    if(themes.length){
+      html += `<div class="kv"><div class="k">Themes</div><div class="tpills">`;
+      themes.forEach(t => html += `<span class="tpill" style="background:${themeColor(t.label)}">${esc(t.label)}</span>`);
+      html += `</div></div>`;
+    }
+    const kws = neighborsOfType(id,'Keyword');
+    if(kws.length) html += kv('Keywords', kws.map(k => esc(k.label)).join(', '));
+    if(n.url) html += `<a class="portal" href="${esc(n.url)}" target="_blank" rel="noopener">Open on the portal →</a>`;
+  } else if(n.type === 'Organisation'){
+    html += `<span class="badge" style="background:rgba(232,113,76,.2);color:#f0b39c">Organisation</span>`;
+    html += `<h2>${esc(n.label)}</h2>`;
+    html += `<div class="bignum">${n.count||0}</div><div class="kv"><div class="k" style="margin-top:4px">Datasets published</div></div>`;
+  } else if(n.type === 'Keyword'){
+    html += `<span class="badge" style="background:rgba(142,134,168,.28);color:#c3bce0">Keyword</span>`;
+    html += `<h2>${esc(n.label)}</h2>`;
+    html += `<div class="bignum">${n.count||0}</div><div class="kv"><div class="k" style="margin-top:4px">Datasets tagged</div></div>`;
+  } else {
+    const c = themeColor(n.label);
+    html += `<span class="badge" style="background:${c}33;color:${c}">Theme</span>`;
+    html += `<h2>${esc(n.label)}</h2>`;
+    html += `<div class="bignum">${n.count||0}</div><div class="kv"><div class="k" style="margin-top:4px">Datasets tagged</div></div>`;
+  }
+  body.innerHTML = html;
+  document.getElementById('details').classList.add('open');
+  network.selectNodes([id]);
+  network.focus(id, {scale:1.0, animation:{duration:500}});
+}
+function kv(k,v){ return `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function closeDetails(){ document.getElementById('details').classList.remove('open'); if(network) network.unselectAll(); }
+document.getElementById('d-close').onclick = closeDetails;
+
+/* ---------- search ---------- */
+const q = document.getElementById('q'), hint = document.getElementById('hint');
+q.addEventListener('input', () => {
+  const term = q.value.trim().toLowerCase();
+  if(!term){ hint.textContent=''; return; }
+  const hits = searchIndex.filter(s => s.label.includes(term));
+  if(!hits.length){ hint.textContent = 'No matches'; return; }
+  hits.sort((a,b) => rank(a.type)-rank(b.type));
+  hint.textContent = hits.length + (hits.length===1?' match':' matches') + ' · showing first';
+  showDetails(hits[0].id);
+});
+function rank(t){ return t==='Theme'?0 : t==='Organisation'?1 : t==='Keyword'?2 : 3; }
+
+/* ---------- type filter chips ---------- */
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.onclick = () => {
+    const on = chip.classList.toggle('on'); chip.classList.toggle('off', !on);
+    const type = chip.dataset.type;
+    const updates = nodesDS.get().filter(n => n._type === type).map(n => ({id:n.id, hidden:!on}));
+    nodesDS.update(updates);
+  };
+});
+
+/* ---------- theme legend ---------- */
+const lr = document.getElementById('legend-rows');
+Object.keys(THEME_COLORS).forEach(name => {
+  const row = document.createElement('div'); row.className = 'lrow';
+  row.innerHTML = `<span class="sw" style="background:${THEME_COLORS[name]}"></span>${name}`;
+  row.onclick = () => { const id = 'theme::'+name; if(byId[id]) showDetails(id); };
+  lr.appendChild(row);
+});
+
+start();
+</script>
+</body>
+</html>
