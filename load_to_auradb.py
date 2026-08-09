@@ -27,10 +27,12 @@ except ImportError:
 SECRETS_FILE = "auradb_secrets.json"
 GRAPH_FILE = "graph.json"
 
-# Your instance's database name, as shown in the "name" column of SHOW DATABASES.
-# Newer Aura instances use an id like this rather than the old default "neo4j".
-# If you ever recreate the instance, update this to the new name.
-DATABASE = "a4eac18a"
+# No database name is set anywhere in this file, deliberately. Aura serves one
+# database per instance, and the driver will use whichever one the connection
+# considers its home. Naming it explicitly means editing this file every time
+# the instance is recreated -- and getting it wrong fails in a way that looks
+# like a password problem. Letting the driver decide removes that whole class
+# of mistake.
 
 SECRETS_TEMPLATE = {
     "uri": "neo4j+s://XXXXXXXX.databases.neo4j.io",
@@ -76,7 +78,7 @@ def main():
         return
 
     def run(query, **params):
-        driver.execute_query(query, database_=DATABASE, **params)
+        driver.execute_query(query, **params)
 
     # --- Constraints: make each node's id unique (also speeds up loading) ---
     for label in ("Dataset", "Organisation", "Theme", "Keyword"):
@@ -134,13 +136,11 @@ def main():
     # --- Verify: count what's now in the database ---
     print("\nDone. Here's what's now in AuraDB:")
     records, _, _ = driver.execute_query(
-        "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS c ORDER BY c DESC",
-        database_=DATABASE)
+        "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS c ORDER BY c DESC")
     for rec in records:
         print(f"   {rec['c']:>5}  {rec['label']} nodes")
     records, _, _ = driver.execute_query(
-        "MATCH ()-[r]->() RETURN type(r) AS t, count(*) AS c ORDER BY c DESC",
-        database_=DATABASE)
+        "MATCH ()-[r]->() RETURN type(r) AS t, count(*) AS c ORDER BY c DESC")
     for rec in records:
         print(f"   {rec['c']:>5}  {rec['t']} relationships")
 
