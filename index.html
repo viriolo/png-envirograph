@@ -4,10 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PNG EnviroGraph</title>
+<meta name="description" content="An interactive knowledge graph of Papua New Guinea's environmental datasets — 880 open datasets linked to the bodies that published them and the themes they cover.">
+
+<!-- Social preview. Absolute URLs: scrapers don't resolve relative paths. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PNG EnviroGraph">
+<meta property="og:url" content="https://viriolo.github.io/png-envirograph/">
+<meta property="og:title" content="PNG EnviroGraph — mapping Papua New Guinea's environmental data">
+<meta property="og:description" content="880 open datasets from the PNG Environment Data Portal, reshaped into a connected graph of publishers, themes and shared keywords.">
+<meta property="og:image" content="https://viriolo.github.io/png-envirograph/preview.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A dark network graph of Papua New Guinea's environmental datasets, clustered around publisher and theme hubs.">
+<meta name="twitter:card" content="summary_large_image">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
+
+<!-- Served from this repo, not a CDN. A blocked CDN used to leave the page
+     stuck on the loading splash for ever, which is exactly what happens on
+     the institutional networks most of this audience sits behind. -->
+<script src="vendor/vis-network.min.js"></script>
 <style>
   :root{
     --bg:#0e1311; --bg2:#141b18; --ink:#e9e7df; --muted:#9aa79f; --faint:#6b7872;
@@ -49,6 +67,9 @@
     background:rgba(10,14,12,.4);color:var(--muted);font-size:11.5px;cursor:pointer;text-align:center;
     transition:.18s;user-select:none}
   .chip .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+  /* Keywords are diamonds in the graph, so the chip is a diamond too -- the
+     filter has to look like the thing it filters. */
+  .chip .dot.dia{border-radius:1px;transform:rotate(45deg);width:7px;height:7px}
   .chip.on{color:var(--ink);background:rgba(124,147,136,.16);border-color:rgba(150,180,168,.35)}
   .chip.off{opacity:.42}
 
@@ -118,7 +139,7 @@
     <div class="chip on" data-type="Dataset"><span class="dot" style="background:#7c9388"></span>Datasets</div>
     <div class="chip on" data-type="Organisation"><span class="dot" style="background:#E8714C"></span>Bodies</div>
     <div class="chip on" data-type="Theme"><span class="dot" style="background:#5BBF7B"></span>Themes</div>
-    <div class="chip on" data-type="Keyword"><span class="dot" style="background:#8E86A8"></span>Keywords</div>
+    <div class="chip on" data-type="Keyword"><span class="dot dia" style="background:#B49BE8"></span>Keywords</div>
   </div>
   <div class="legend">
     <div class="lt">Themes</div>
@@ -146,29 +167,53 @@ const THEME_COLORS = {
   "Culture and Heritage":"#C56FA8","Inland Waters":"#4FC8C0",
   "Nuclear Legacy":"#C75C5C","Disaster Risk Management":"#E0A93B"
 };
-const FALLBACK_THEME = "#8FA68E";
+// Datasets and keywords are both small unlabelled dots, so colour was the only
+// thing telling them apart -- and the old pair sat at dE 7.5 for normal vision
+// and 5.1 under deuteranopia, i.e. not apart at all. Keywords now carry a
+// stronger violet AND a diamond shape, so the distinction survives colour
+// blindness, a bad monitor and a projector.
+const FALLBACK_THEME = "#D9D2C5";   // only fires if the portal adds a new theme
 const ORG_COLOR = "#E8714C";
 const DS_COLOR = "#7c9388";
-const KW_COLOR = "#8E86A8";
+const KW_COLOR = "#B49BE8";
 const themeColor = n => THEME_COLORS[n] || FALLBACK_THEME;
 
 let network, nodesDS, edgesDS, adj = {}, byId = {}, searchIndex = [];
 
 function setStatus(t){ document.getElementById('lstatus').textContent = t; }
 
+/* Every failure has to end up here. The splash sits on top of the page, so
+   anything that throws on the way to a drawn graph leaves the reader staring
+   at "Loading the graph..." for ever with no idea why. Say what broke. */
+function fail(message){
+  setStatus(message);
+  document.getElementById('bar').style.background = '#9A9387';
+}
+
 async function start(){
+  if(typeof vis === 'undefined'){
+    fail("The graph library didn't load. It ships with this page at "
+       + "vendor/vis-network.min.js — if that file is missing or blocked, reload, "
+       + "and if it persists the copy in the repository may not have been uploaded.");
+    return;
+  }
+
   let data;
   try {
     const res = await fetch('graph.json');
     if(!res.ok) throw new Error('HTTP '+res.status);
     data = await res.json();
   } catch(err){
-    setStatus("Couldn't load graph.json. If you opened this file directly, your browser blocks local reads. "
+    fail("Couldn't load graph.json. If you opened this file directly, your browser blocks local reads. "
       + "In this folder run:  python -m http.server 8000  then open http://localhost:8000 — or just upload both files to your host, where it works automatically.");
-    document.getElementById('bar').style.background = '#9A9387';
     return;
   }
-  build(data);
+
+  try {
+    build(data);
+  } catch(err){
+    fail("The graph loaded but couldn't be drawn: " + (err && err.message ? err.message : err));
+  }
 }
 
 function build(data){
@@ -197,8 +242,8 @@ function build(data){
     }
     if(n.type === 'Keyword'){
       nKw++;
-      return {id:n.id, title:n.label, shape:'dot', size:5 + Math.sqrt(n.count||1)*1.6,
-        color:{background:KW_COLOR, border:KW_COLOR, highlight:{background:'#cfc8e6',border:'#cfc8e6'}},
+      return {id:n.id, title:n.label, shape:'diamond', size:5 + Math.sqrt(n.count||1)*1.6,
+        color:{background:KW_COLOR, border:KW_COLOR, highlight:{background:'#e0d5ff',border:'#e0d5ff'}},
         _type:'Keyword'};
     }
     nTh++;
@@ -280,7 +325,7 @@ function showDetails(id){
     html += `<h2>${esc(n.label)}</h2>`;
     html += `<div class="bignum">${n.count||0}</div><div class="kv"><div class="k" style="margin-top:4px">Datasets published</div></div>`;
   } else if(n.type === 'Keyword'){
-    html += `<span class="badge" style="background:rgba(142,134,168,.28);color:#c3bce0">Keyword</span>`;
+    html += `<span class="badge" style="background:rgba(180,155,232,.26);color:#d5c8f5">Keyword</span>`;
     html += `<h2>${esc(n.label)}</h2>`;
     html += `<div class="bignum">${n.count||0}</div><div class="kv"><div class="k" style="margin-top:4px">Datasets tagged</div></div>`;
   } else {
