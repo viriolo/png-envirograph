@@ -381,7 +381,10 @@ function build(data){
             width:0.4, smooth:false },
     physics:{ enabled:true, solver:'barnesHut',
       barnesHut:{gravitationalConstant:-9000, springLength:130, springConstant:0.018, damping:0.42, avoidOverlap:0.05},
-      stabilization:{enabled:true, iterations:280, updateInterval:25} },
+      // fit:false matters. By default vis fits the whole graph once stabilising
+      // ends -- after this code's own framing has run -- so the two raced and
+      // the outlier-hugging fit usually won. We do our own framing below.
+      stabilization:{enabled:true, iterations:280, updateInterval:25, fit:false} },
     layout:{ improvedLayout:false },
     // keyboard works only once the canvas itself has focus, so arrow keys still
     // belong to the search results list everywhere else on the page.
@@ -397,7 +400,12 @@ function build(data){
     document.getElementById('bar').style.width = '100%';
     setStatus('Ready');
     document.getElementById('loading').classList.add('done');
-    network.fit({animation:{duration:600}});
+    // One deterministic order, all of it after physics has stopped:
+    // unstack the hubs, wait until vis has measured the labels, place them,
+    // and only then choose the frame. Framing earlier raced the label pass
+    // and the view jumped around depending on which finished first.
+    separateHubs();
+    runLabelPassWhenMeasured();
   });
 
   network.on('click', params => {
@@ -408,6 +416,157 @@ function build(data){
     const near = nearestNode(params.pointer.DOM);
     if(near) showDetails(near); else closeDetails();
   });
+}
+
+/* A handful of datasets sit way out on their own, and fit() dutifully framed
+   them -- which shrank everything worth looking at into a speck in the middle.
+   Framing the middle 90% instead opens on the part that carries the meaning
+   and lets the stragglers sit off-screen until someone zooms out. */
+function frameCore(){
+  // Frame the labelled hubs -- the themes and the publishing bodies. Those
+  // carry the story; the 880 dataset dots are the texture around them and
+  // will fill in the edges of the frame by themselves. Framing everything,
+  // even with the outliers trimmed, just centres a wide field of dots and
+  // shrinks the part anyone came to read.
+  // The themes and the bodies that publish enough to matter. All 115 bodies
+  // would be nearly as wide as the whole graph -- most publish one dataset and
+  // sit right out on the rim.
+  const anchors = nodesDS.get().filter(n =>
+    n._type === 'Theme' || (n._type === 'Organisation' && (byId[n.id] && (byId[n.id].count||0) >= 10)));
+  const ids = anchors.length >= 6 ? anchors.map(n => n.id) : nodesDS.getIds();
+  const pts = Object.values(network.getPositions(ids));
+  if(!pts.length){ network.fit(); return; }
+  const xs = pts.map(p => p.x).sort((a,b) => a-b);
+  const ys = pts.map(p => p.y).sort((a,b) => a-b);
+  const pc = (arr,f) => arr[Math.min(arr.length-1, Math.floor(arr.length*f))];
+  const x1 = pc(xs,.05), x2 = pc(xs,.95), y1 = pc(ys,.05), y2 = pc(ys,.95);
+  const w = Math.max(1, x2-x1), h = Math.max(1, y2-y1);
+  const el = document.getElementById('graph');
+  // Generous padding: the hubs should sit in the middle third or so, with the
+  // dataset field filling the rest -- not fill the frame edge to edge.
+  const PAD = 2.4;
+  let scale = Math.min(el.clientWidth/(w*PAD), el.clientHeight/(h*PAD));
+  if(!isFinite(scale) || scale <= 0) { network.fit(); return; }
+  scale = Math.max(0.22, Math.min(0.6, scale));
+  // No animation. An animated moveTo is interruptible, and during load it was
+  // losing races with whatever else vis was doing to the camera -- the opening
+  // zoom came out different run to run, sometimes ignoring the clamp entirely.
+  // Setting it outright is instant and always lands where it was told.
+  network.moveTo({position:{x:(x1+x2)/2, y:(y1+y2)/2}, scale});
+}
+
+/* Labels overlapped because the hubs they belong to sit close together. With
+   physics switched off the positions are final, so this can be solved once
+   rather than fought every frame: walk the labels biggest-hub-first and nudge
+   each one vertically until it clears everything already placed. The first
+   offset tried is zero, so most labels never move. */
+/* The labelled hubs pile up on each other: every theme touches hundreds of
+   datasets, so the springs drag them all to the same middle. Giving them extra
+   mass in the physics does fix it, but it cost ~13s of stabilisation on a
+   graph that already takes too long to settle. Since physics is off by the
+   time this runs, the same result comes from simply pushing overlapping hubs
+   apart -- a few thousand comparisons, over in milliseconds, and it cannot
+   affect load time at all. Only labelled nodes move; the dataset field stays
+   exactly where the layout put it. */
+function separateHubs(){
+  const hubs = nodesDS.get().filter(n => n.label);
+  if(hubs.length < 2) return 0;
+  const start = network.getPositions(hubs.map(n => n.id));
+  const P = {};
+  hubs.forEach(n => { const p = start[n.id]; if(p) P[n.id] = {x:p.x, y:p.y}; });
+  const PAD = 7;
+  for(let iter = 0; iter < 60; iter++){
+    let moved = false;
+    for(let i = 0; i < hubs.length; i++){
+      for(let j = i + 1; j < hubs.length; j++){
+        const a = P[hubs[i].id], b = P[hubs[j].id];
+        if(!a || !b) continue;
+        const need = (hubs[i].size || 10) + (hubs[j].size || 10) + PAD;
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d = Math.hypot(dx, dy);
+        if(d >= need) continue;
+        if(d === 0){ dx = 1; dy = 0; d = 1; }          // identical positions: pick a direction
+        const push = (need - d) / 2;
+        dx /= d; dy /= d;
+        a.x -= dx * push; a.y -= dy * push;
+        b.x += dx * push; b.y += dy * push;
+        moved = true;
+      }
+    }
+    if(!moved) break;
+  }
+  const updates = hubs
+    .filter(n => P[n.id] && Math.hypot(P[n.id].x - start[n.id].x, P[n.id].y - start[n.id].y) > 0.5)
+    .map(n => ({id:n.id, x:P[n.id].x, y:P[n.id].y}));
+  if(updates.length) nodesDS.update(updates);
+  return updates.length;
+}
+
+const LABEL_NUDGES = [0,-16,16,-32,32,-48,48,-64,64];
+
+/* vis measures the real text width for us, which beats guessing from character
+   count -- but only size.width/height can be trusted. size.left/top are set
+   while a label is being painted and read back as zero the rest of the time,
+   which is exactly the trap that made an earlier version of this decide all
+   124 labels were stacked at the origin. So: take the measured width, and work
+   out the position from the node, which is where vis puts it anyway -- centred
+   under the dot. All canvas units, same as vadjust. */
+const LABEL_GAP = 5;
+function labelBox(id, item){
+  const p = network.getPositions([id])[id];
+  if(!p) return null;
+  const nd = network.body && network.body.nodes && network.body.nodes[id];
+  const s = nd && nd.labelModule && nd.labelModule.size;
+  const fs = (item.font && item.font.size) || 13;
+  const w = (s && s.width) ? s.width : item.label.length * fs * 0.52;
+  const h = (s && s.height) ? s.height : fs * 1.3;
+  const top = p.y + (item.size || 10) + LABEL_GAP;
+  return {x1:p.x - w/2, x2:p.x + w/2, y1:top, y2:top + h};
+}
+
+/* vis only measures a label's real width the first time it paints it, and the
+   first frame after stabilising isn't reliably that moment. Run the placement
+   pass too early and every label falls back to a rough character-count width,
+   which under-reads the boxes and finds nothing to fix. So wait until the
+   measurements exist, and give up gracefully rather than spin for ever. */
+function runLabelPassWhenMeasured(tries){
+  tries = tries || 0;
+  const measured = nodesDS.get().filter(n => n.label).some(n => {
+    const nd = network.body && network.body.nodes && network.body.nodes[n.id];
+    return nd && nd.labelModule && nd.labelModule.size && nd.labelModule.size.width > 0;
+  });
+  if(measured || tries > 25){
+    deCollideLabels();
+    frameCore();
+    // Re-assert once the load settles. Cheap insurance: if anything else
+    // touched the camera on the way in, this is the last word.
+    setTimeout(frameCore, 500);
+    return;
+  }
+  setTimeout(() => runLabelPassWhenMeasured(tries + 1), 60);
+}
+
+function deCollideLabels(){
+  const labelled = nodesDS.get().filter(n => n.label && !n.hidden);
+  if(!labelled.length) return 0;
+  labelled.sort((a,b) => (b.size||0) - (a.size||0));   // important hubs keep their natural spot
+  const placed = [], updates = [];
+  const hits = (box) => placed.some(q => box.x1 < q.x2 && q.x1 < box.x2 && box.y1 < q.y2 && q.y1 < box.y2);
+  for(const n of labelled){
+    const base = labelBox(n.id, n);
+    if(!base) continue;
+    let chosen = 0;
+    for(let k = 0; k < LABEL_NUDGES.length; k++){
+      const nudge = LABEL_NUDGES[k];
+      const box = {x1:base.x1, x2:base.x2, y1:base.y1 + nudge, y2:base.y2 + nudge};
+      if(!hits(box) || k === LABEL_NUDGES.length - 1){   // last resort: accept and move on
+        chosen = nudge; placed.push(box); break;
+      }
+    }
+    if(chosen) updates.push({id:n.id, font:Object.assign({}, n.font, {vadjust:chosen})});
+  }
+  if(updates.length) nodesDS.update(updates);
+  return updates.length;
 }
 
 /* Nearest visible node within a forgiving radius of the click. The tolerance
